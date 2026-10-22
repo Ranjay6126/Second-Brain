@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+
+# Data & secrets
+backend/data/
+backend/.env
+
+# Node
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
