@@ -1,0 +1,353 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ theme */
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  --color-void-950: #04050c;
+  --color-void-900: #070915;
+  --color-void-850: #0a0d1c;
+  --color-void-800: #0e1224;
+
+  --color-accent-400: #818cf8;
+  --color-accent-500: #6366f1;
+  --color-accent-600: #4f46e5;
+
+  --animate-blob-a: blob-a 26s ease-in-out infinite;
+  --animate-blob-b: blob-b 34s ease-in-out infinite;
+  --animate-blob-c: blob-c 42s ease-in-out infinite;
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-float: float 7s ease-in-out infinite;
+
+  @keyframes blob-a {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(7%, -9%, 0) scale(1.14);
+    }
+    66% {
+      transform: translate3d(-6%, 6%, 0) scale(0.92);
+    }
+  }
+
+  @keyframes blob-b {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1.05);
+    }
+    40% {
+      transform: translate3d(-9%, 7%, 0) scale(0.9);
+    }
+    75% {
+      transform: translate3d(6%, 10%, 0) scale(1.18);
+    }
+  }
+
+  @keyframes blob-c {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(0.95);
+    }
+    50% {
+      transform: translate3d(9%, 8%, 0) scale(1.2);
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  @keyframes float {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-6px);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------- base */
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: var(--color-void-950);
+    color: rgb(226 232 240);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
+
+  ::selection {
+    background-color: rgba(129, 140, 248, 0.32);
+    color: #fff;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: rgb(100 116 139);
+  }
+
+  [data-focus-ring]:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px rgba(129, 140, 248, 0.6),
+      0 0 0 4px rgba(15, 23, 42, 0.85);
+  }
+
+  textarea {
+    resize: none;
+  }
+}
+
+/* -------------------------------------------------------------- textures */
+
+.app-canvas {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-canvas::after {
+  content: "";
+  position: absolute;
+  inset: -20%;
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+  background-size: 68px 68px;
+  -webkit-mask-image: radial-gradient(ellipse 85% 65% at 50% -5%, #000 0%, transparent 72%);
+  mask-image: radial-gradient(ellipse 85% 65% at 50% -5%, #000 0%, transparent 72%);
+}
+
+.noise-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ---------------------------------------------------------- scrollbars */
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(129, 140, 248, 0.32) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 9999px;
+  background-clip: padding-box;
+  background-color: rgba(148, 163, 184, 0.28);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(129, 140, 248, 0.55);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ------------------------------------------------------------ skeletons */
+
+.skeleton {
+  background-image: linear-gradient(
+    100deg,
+    rgba(148, 163, 184, 0.07) 20%,
+    rgba(148, 163, 184, 0.16) 45%,
+    rgba(148, 163, 184, 0.07) 70%
+  );
+  background-size: 220% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* ------------------------------------------------------- markdown output */
+
+.brain-prose {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: rgb(226 232 240);
+  overflow-wrap: anywhere;
+}
+
+.brain-prose > * + * {
+  margin-top: 0.85em;
+}
+
+.brain-prose h1,
+.brain-prose h2,
+.brain-prose h3,
+.brain-prose h4 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #fff;
+  line-height: 1.3;
+}
+
+.brain-prose h1 {
+  font-size: 1.35rem;
+}
+
+.brain-prose h2 {
+  font-size: 1.15rem;
+}
+
+.brain-prose h3,
+.brain-prose h4 {
+  font-size: 1rem;
+}
+
+.brain-prose strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.brain-prose em {
+  color: rgb(199 210 254);
+}
+
+.brain-prose a {
+  color: rgb(165 180 252);
+  text-decoration: underline;
+  text-decoration-color: rgba(165, 180, 252, 0.45);
+  text-underline-offset: 3px;
+}
+
+.brain-prose a:hover {
+  color: rgb(199 210 254);
+}
+
+.brain-prose ul,
+.brain-prose ol {
+  padding-left: 1.35em;
+}
+
+.brain-prose ul {
+  list-style: disc;
+}
+
+.brain-prose ol {
+  list-style: decimal;
+}
+
+.brain-prose li::marker {
+  color: rgb(129 140 248);
+}
+
+.brain-prose li + li {
+  margin-top: 0.3em;
+}
+
+.brain-prose code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.42em;
+  border-radius: 0.45rem;
+  background-color: rgba(129, 140, 248, 0.14);
+  color: rgb(199 210 254);
+  border: 1px solid rgba(129, 140, 248, 0.18);
+}
+
+.brain-prose pre {
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  overflow-x: auto;
+  background-color: rgba(2, 4, 12, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.brain-prose pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgb(226 232 240);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.brain-prose blockquote {
+  padding: 0.35rem 0 0.35rem 0.95rem;
+  border-left: 2px solid rgba(129, 140, 248, 0.5);
+  color: rgb(203 213 225);
+  font-style: italic;
+}
+
+.brain-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  overflow: hidden;
+  border-radius: 0.85rem;
+}
+
+.brain-prose th,
+.brain-prose td {
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+
+.brain-prose th {
+  background-color: rgba(148, 163, 184, 0.08);
+  font-weight: 600;
+  color: #fff;
+}
+
+.brain-prose hr {
+  border: 0;
+  height: 1px;
+  background-color: rgba(148, 163, 184, 0.16);
+}
+
+.brain-prose img {
+  border-radius: 0.85rem;
+  max-width: 100%;
+}
