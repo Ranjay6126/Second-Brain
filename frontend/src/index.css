@@ -1,0 +1,176 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background-color: #f9fafb;
+    color: #111827;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+  }
+
+  [data-focus-ring]:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+  }
+
+  textarea {
+    resize: none;
+  }
+}
+
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.skeleton {
+  background-color: #e5e7eb;
+}
+
+/* Markdown output inside chat answers and note previews. */
+.brain-prose {
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: #1f2937;
+  overflow-wrap: anywhere;
+}
+
+.brain-prose > * + * {
+  margin-top: 0.85em;
+}
+
+.brain-prose h1,
+.brain-prose h2,
+.brain-prose h3,
+.brain-prose h4 {
+  font-weight: 600;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.brain-prose h1 {
+  font-size: 1.35rem;
+}
+
+.brain-prose h2 {
+  font-size: 1.15rem;
+}
+
+.brain-prose h3,
+.brain-prose h4 {
+  font-size: 1rem;
+}
+
+.brain-prose strong {
+  color: #111827;
+  font-weight: 600;
+}
+
+.brain-prose em {
+  color: #374151;
+}
+
+.brain-prose a {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+.brain-prose ul,
+.brain-prose ol {
+  padding-left: 1.35em;
+}
+
+.brain-prose ul {
+  list-style: disc;
+}
+
+.brain-prose ol {
+  list-style: decimal;
+}
+
+.brain-prose li + li {
+  margin-top: 0.3em;
+}
+
+.brain-prose code {
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  padding: 0.15em 0.42em;
+  border-radius: 0.25rem;
+  background-color: #f3f4f6;
+  color: #111827;
+  border: 1px solid #e5e7eb;
+}
+
+.brain-prose pre {
+  padding: 0.9rem 1rem;
+  border-radius: 0.5rem;
+  overflow-x: auto;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+}
+
+.brain-prose pre code {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #1f2937;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.brain-prose blockquote {
+  padding: 0.35rem 0 0.35rem 0.95rem;
+  border-left: 3px solid #d1d5db;
+  color: #4b5563;
+}
+
+.brain-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.brain-prose th,
+.brain-prose td {
+  border: 1px solid #e5e7eb;
+  padding: 0.45rem 0.65rem;
+  text-align: left;
+}
+
+.brain-prose th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #111827;
+}
+
+.brain-prose hr {
+  border: 0;
+  height: 1px;
+  background-color: #e5e7eb;
+}
+
+.brain-prose img {
+  border-radius: 0.25rem;
+  max-width: 100%;
+}
