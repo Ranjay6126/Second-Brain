@@ -23,11 +23,33 @@ def _sse(payload: dict[str, Any]) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _retrieve(query: str, top_k: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+NO_ANSWER = (
+    "I couldn't find enough information in your uploaded sources to answer this question."
+)
+
+
+def _retrieve(
+    query: str,
+    top_k: int,
+    item_ids: list[str] | None = None,
+    strict: bool | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     query_vec, signature = llm.embed_query(query)
-    if not query_vec:
-        return [], []
-    hits = vector.search(query_vec, top_k=top_k)
+    # Without a language model to judge the passages, only passages that share
+    # real words with the question may be quoted back to the user. With a model
+    # in the loop the ranking can stay permissive: the system prompt already
+    # tells it to say it could not find an answer when the context does not
+    # contain one. `/api/search` is a diagnostic endpoint, so it always returns
+    # the closest passages and leaves the honesty gate to the chat path.
+    if strict is None:
+        strict = llm.provider() == "local"
+    hits = vector.search(
+        query_vec if query_vec else None,
+        top_k=top_k,
+        item_ids=item_ids,
+        query_text=query,
+        strict=strict,
+    )
     stale = vector.stale_count(signature)
     if stale and not hits:
         # Vectors were built with a different embedding model: rebuild lazily.
@@ -40,6 +62,7 @@ def _retrieve(query: str, top_k: int) -> tuple[list[dict[str, Any]], list[dict[s
             "kind": hit["kind"],
             "chunk_idx": hit["chunk_idx"],
             "score": hit["score"],
+            "meta": hit.get("meta") or {},
             "text": hit["text"],
         }
         for index, hit in enumerate(hits)
@@ -47,9 +70,50 @@ def _retrieve(query: str, top_k: int) -> tuple[list[dict[str, Any]], list[dict[s
     return hits, contexts
 
 
+def _unreadable_notice() -> str | None:
+    """Explain a dead-end answer when stored media could not be read.
+
+    Without a vision/transcription provider an image, audio or video file is
+    stored but its contents are never extracted, so no answer can possibly be
+    drawn from it. Saying which files are affected and which key unlocks them
+    turns a dead end into a next step.
+    """
+    blocked = db.unreadable_media()
+    if not blocked:
+        return None
+    listed = " and ".join(
+        f"{row['count']} {row['kind']} file" + ("s" if row["count"] != 1 else "")
+        for row in blocked
+    )
+    hints = " ".join(llm.media_hint(row["kind"]) for row in blocked)
+    return (
+        f"Heads-up: {listed} in your library could not be read, so their contents are "
+        f"not searchable and cannot answer this question. {hints} After restarting the "
+        f"backend, use Reprocess on the file to index it for real."
+    )
+
+
+def _citation(context: dict[str, Any]) -> dict[str, Any]:
+    meta = context.get("meta") or {}
+    return {
+        "item_id": context["item_id"],
+        "title": context["title"],
+        "kind": context["kind"],
+        "chunk_idx": context["chunk_idx"],
+        "score": context["score"],
+        "page": meta.get("page"),
+        "timestamp": meta.get("timestamp"),
+        "end_timestamp": meta.get("end_timestamp"),
+        "location": llm.locate(meta).lstrip(", ") or None,
+        "snippet": " ".join(context["text"].split())[:240],
+    }
+
+
 @router.post("/search")
 def search(payload: SearchIn):
-    hits, _ = _retrieve(payload.query, payload.top_k or TOP_K)
+    hits, _ = _retrieve(
+        payload.query, payload.top_k or TOP_K, payload.item_ids, strict=False
+    )
     return {"hits": hits}
 
 
@@ -99,31 +163,21 @@ def chat(payload: ChatIn):
     db.add_message(conversation_id, "user", payload.message)
     db.touch_conversation(conversation_id)
 
-    hits, contexts = _retrieve(payload.message, payload.top_k or TOP_K)
-
-    citations = [
-        {
-            "item_id": ctx["item_id"],
-            "title": ctx["title"],
-            "kind": ctx["kind"],
-            "chunk_idx": ctx["chunk_idx"],
-            "score": ctx["score"],
-            "snippet": " ".join(ctx["text"].split())[:240],
-        }
-        for ctx in contexts
-    ]
+    hits, contexts = _retrieve(
+        payload.message, payload.top_k or TOP_K, payload.item_ids
+    )
+    citations = [_citation(ctx) for ctx in contexts]
 
     def event_stream():
         yield _sse({"type": "conversation", "conversation_id": conversation_id})
         yield _sse({"type": "retrieval", "hits": hits})
 
         if not contexts:
-            message = (
-                "I couldn't find anything in your Second Brain about that yet. "
-                "Add a note or upload a file on the Library tab and ask me again."
-            )
-            yield _sse({"type": "token", "text": message})
-            stored = db.add_message(conversation_id, "assistant", message, [])
+            yield _sse({"type": "token", "text": NO_ANSWER})
+            stored = db.add_message(conversation_id, "assistant", NO_ANSWER, [])
+            notice = _unreadable_notice()
+            if notice:
+                yield _sse({"type": "notice", "notice": notice})
             yield _sse({"type": "done", "message": stored})
             return
 
@@ -141,8 +195,15 @@ def chat(payload: ChatIn):
                 )
 
         answer = "".join(parts).strip() or "I could not produce an answer from those sources."
-        stored = db.add_message(conversation_id, "assistant", answer, citations)
+        # A no-answer must stay uncited: the passages were retrieved but did not
+        # support an answer, so linking them would claim support that isn't there.
+        cited = [] if NO_ANSWER in answer else citations
+        stored = db.add_message(conversation_id, "assistant", answer, cited)
         db.touch_conversation(conversation_id)
+        if NO_ANSWER in answer:
+            notice = _unreadable_notice()
+            if notice:
+                yield _sse({"type": "notice", "notice": notice})
         yield _sse({"type": "done", "message": stored})
 
     return StreamingResponse(
