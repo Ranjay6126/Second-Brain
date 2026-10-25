@@ -267,6 +267,7 @@ export type ChatEvent =
   | { type: 'conversation'; conversation_id: string }
   | { type: 'retrieval'; hits: SearchHit[] }
   | { type: 'token'; text: string }
+  | { type: 'notice'; notice: string }
   | { type: 'done'; message: Message }
   | { type: 'error'; message: string };
 
@@ -282,6 +283,8 @@ export interface ChatStreamHandlers {
   onConversation?: (conversationId: string) => void;
   onRetrieval?: (hits: SearchHit[]) => void;
   onToken?: (text: string) => void;
+  /** A system explanation attached to the answer (never model output). */
+  onNotice?: (notice: string) => void;
   onDone?: (message: Message) => void;
   onError?: (message: string) => void;
 }
@@ -317,6 +320,8 @@ function parseChatEvent(payload: string): ChatEvent | null {
       return Array.isArray(value.hits) ? { type: 'retrieval', hits: value.hits as SearchHit[] } : null;
     case 'token':
       return typeof value.text === 'string' ? { type: 'token', text: value.text } : null;
+    case 'notice':
+      return typeof value.notice === 'string' ? { type: 'notice', notice: value.notice } : null;
     case 'done':
       return isRecord(value.message) && typeof value.message.content === 'string'
         ? { type: 'done', message: toMessage(value.message) }
@@ -375,6 +380,9 @@ export async function streamChat(
         return;
       case 'token':
         handlers.onToken?.(event.text);
+        return;
+      case 'notice':
+        handlers.onNotice?.(event.notice);
         return;
       case 'done':
         handlers.onDone?.(event.message);
