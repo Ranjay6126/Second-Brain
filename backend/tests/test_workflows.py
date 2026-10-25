@@ -152,15 +152,35 @@ def test_image_is_indexed_from_metadata_without_a_vision_key(client, clean_libra
     assert hits and hits[0]["item_id"] == item["id"]
 
 
+def test_a_dead_end_names_the_files_that_could_not_be_read(client, clean_library):
+    """The no-answer sentence alone is a dead end; say which files caused it."""
+    response = upload(client, "marksheet.png", build_png(64, 48), title="Marksheet")
+    assert response.status_code == 200, response.text
+    item = wait_for_status(client, response.json()["id"])
+    assert item["meta"]["vision_error"], "no key means the image is stored unread"
+    vector.invalidate()
+
+    events = sse_events(
+        client.post("/api/chat", json={"message": "what is the capital of france"}).text
+    )
+
+    done = [e for e in events if e["type"] == "done"][0]
+    assert done["message"]["content"] == NO_ANSWER
+    assert done["message"]["citations"] == []
+
+    notices = [e for e in events if e["type"] == "notice"]
+    assert notices, "a dead end must explain that stored media could not be read"
+    notice = notices[0]["notice"]
+    assert "1 image file" in notice
+    assert "OPENROUTER_API_KEY" in notice
+
+
 def test_corrupted_image_fails_cleanly(client, clean_library):
     response = upload(client, "broken.png", b"\x89PNG\r\n\x1a\n not really an image")
     assert response.status_code == 200
     item = wait_for_status(client, response.json()["id"])
     assert item["status"] == "failed"
     assert item["error"]
-
-
-# ------------------------------------------------------------- audio / video
 
 
 def test_audio_without_a_key_explains_the_dependency(client, clean_library):
