@@ -4,5 +4,10 @@ python-multipart>=0.0.12
 python-dotenv>=1.0
 pydantic>=2.9
 numpy>=1.26
+httpx>=0.27
 pypdf>=5.0
+pillow>=10.0
 google-genai>=1.0
+
+# Development / tests
+pytest>=8.0
