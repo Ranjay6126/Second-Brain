@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS items (
   summary    TEXT,
   content    TEXT,
   tags       TEXT NOT NULL DEFAULT '',
+  meta       TEXT NOT NULL DEFAULT '{}',
   status     TEXT NOT NULL DEFAULT 'ready',
   error      TEXT,
   created_at TEXT NOT NULL,
@@ -36,6 +37,7 @@ CREATE TABLE IF NOT EXISTS chunks (
   embedding   BLOB NOT NULL,
   dim         INTEGER NOT NULL,
   embed_model TEXT NOT NULL DEFAULT '',
+  meta        TEXT NOT NULL DEFAULT '{}',
   FOREIGN KEY (item_id) REFERENCES items(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_chunks_item ON chunks(item_id);
@@ -89,6 +91,28 @@ def db() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with db() as conn:
         conn.executescript(SCHEMA)
+        # Forward-compatible migration for databases created before metadata
+        # columns existed.
+        _ensure_column(conn, "items", "meta", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(conn, "chunks", "meta", "TEXT NOT NULL DEFAULT '{}'")
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl: str) -> None:
+    columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in columns:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+
+
+def _loads(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict):
+        return raw
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return value if isinstance(value, dict) else {}
 
 
 # --------------------------------------------------------------------------- items
@@ -130,6 +154,7 @@ def row_to_item(row: sqlite3.Row, chunk_count: int = 0) -> dict[str, Any]:
         "note": row["note"],
         "summary": row["summary"],
         "tags": tags_to_list(row["tags"]),
+        "meta": _loads(row["meta"]),
         "status": row["status"],
         "error": row["error"],
         "chunk_count": chunk_count,
@@ -151,8 +176,9 @@ def create_item(**fields: Any) -> dict[str, Any]:
         conn.execute(
             """
             INSERT INTO items (id, title, kind, source, mime, size_bytes, file_path,
-                               note, summary, content, tags, status, error, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               note, summary, content, tags, meta, status, error,
+                               created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 item_id,
@@ -166,6 +192,7 @@ def create_item(**fields: Any) -> dict[str, Any]:
                 fields.get("summary"),
                 fields.get("content"),
                 _tags_to_str(fields.get("tags")),
+                json.dumps(fields.get("meta") or {}),
                 fields.get("status", "ready"),
                 fields.get("error"),
                 ts,
@@ -191,6 +218,7 @@ def update_item(item_id: str, **fields: Any) -> None:
         "mime",
         "size_bytes",
         "file_path",
+        "meta",
     }
     sets: list[str] = []
     values: list[Any] = []
@@ -198,7 +226,12 @@ def update_item(item_id: str, **fields: Any) -> None:
         if key not in allowed:
             continue
         sets.append(f"{key} = ?")
-        values.append(_tags_to_str(value) if key == "tags" else value)
+        if key == "tags":
+            values.append(_tags_to_str(value))
+        elif key == "meta":
+            values.append(json.dumps(value or {}))
+        else:
+            values.append(value)
     if not sets:
         return
     sets.append("updated_at = ?")
@@ -260,13 +293,23 @@ def delete_item(item_id: str) -> bool:
         return cur.rowcount > 0
 
 
-def replace_chunks(item_id: str, texts: list[str], vectors: list[list[float]], model: str) -> None:
+def replace_chunks(
+    item_id: str,
+    texts: list[str],
+    vectors: list[list[float]],
+    model: str,
+    metas: list[dict[str, Any]] | None = None,
+) -> None:
+    """Replace every chunk of an item. Deleting first keeps reprocessing and
+    retries from creating duplicate or orphaned vectors."""
     import numpy as np
 
+    metas = metas or [{} for _ in texts]
     with db() as conn:
         conn.execute("DELETE FROM chunks WHERE item_id = ?", (item_id,))
         conn.executemany(
-            "INSERT INTO chunks (item_id, idx, text, embedding, dim, embed_model) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO chunks (item_id, idx, text, embedding, dim, embed_model, meta) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     item_id,
@@ -275,8 +318,9 @@ def replace_chunks(item_id: str, texts: list[str], vectors: list[list[float]], m
                     np.asarray(vec, dtype=np.float32).tobytes(),
                     len(vec),
                     model,
+                    json.dumps(meta or {}),
                 )
-                for idx, (text, vec) in enumerate(zip(texts, vectors))
+                for idx, (text, vec, meta) in enumerate(zip(texts, vectors, metas))
             ],
         )
 
@@ -284,9 +328,33 @@ def replace_chunks(item_id: str, texts: list[str], vectors: list[list[float]], m
 def get_chunks(item_id: str) -> list[dict[str, Any]]:
     with db() as conn:
         rows = conn.execute(
-            "SELECT idx, text FROM chunks WHERE item_id = ? ORDER BY idx", (item_id,)
+            "SELECT idx, text, meta FROM chunks WHERE item_id = ? ORDER BY idx", (item_id,)
         ).fetchall()
-    return [{"idx": r["idx"], "text": r["text"]} for r in rows]
+    return [
+        {"idx": r["idx"], "text": r["text"], "meta": _loads(r["meta"])} for r in rows
+    ]
+
+
+def unreadable_media() -> list[dict[str, Any]]:
+    """Files whose contents were never extracted, grouped by kind.
+
+    Ingestion records `vision_error` on a stored image when no vision provider
+    could read it, and fails audio/video outright when there is no transcriber.
+    Both cases mean the file is on disk but its contents cannot be searched, so
+    answers drawn from it are impossible.
+    """
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT kind, COUNT(*) AS c
+            FROM items
+            WHERE kind IN ('image', 'audio', 'video')
+              AND (status = 'failed' OR meta LIKE '%"vision_error"%')
+            GROUP BY kind
+            ORDER BY c DESC
+            """
+        ).fetchall()
+    return [{"kind": r["kind"], "count": int(r["c"])} for r in rows]
 
 
 def counts() -> dict[str, int]:
@@ -296,6 +364,50 @@ def counts() -> dict[str, int]:
         ).fetchone()["c"]
         chunks = conn.execute("SELECT COUNT(*) AS c FROM chunks").fetchone()["c"]
     return {"items": int(items), "chunks": int(chunks)}
+
+
+def library_stats() -> dict[str, Any]:
+    """Real numbers for the dashboard - nothing estimated or decorative."""
+    from .config import UPLOAD_DIR
+
+    with db() as conn:
+        rows = conn.execute(
+            """
+            SELECT i.kind,
+                   COUNT(*) AS items,
+                   COALESCE(SUM(i.size_bytes), 0) AS bytes,
+                   COALESCE(SUM((SELECT COUNT(*) FROM chunks c WHERE c.item_id = i.id)), 0) AS chunks
+            FROM items i
+            WHERE i.status != 'failed'
+            GROUP BY i.kind
+            ORDER BY items DESC
+            """
+        ).fetchall()
+        by_status = {
+            r["status"]: int(r["c"])
+            for r in conn.execute(
+                "SELECT status, COUNT(*) AS c FROM items GROUP BY status"
+            ).fetchall()
+        }
+
+    disk_bytes = sum(f.stat().st_size for f in UPLOAD_DIR.glob("*") if f.is_file())
+    kinds = [
+        {
+            "kind": r["kind"],
+            "items": int(r["items"]),
+            "chunks": int(r["chunks"]),
+            "bytes": int(r["bytes"]),
+        }
+        for r in rows
+    ]
+    return {
+        "items": sum(k["items"] for k in kinds),
+        "chunks": sum(k["chunks"] for k in kinds),
+        "upload_bytes": int(disk_bytes),
+        "by_kind": kinds,
+        "by_status": by_status,
+        "conversations": len(list_conversations()),
+    }
 
 
 # -------------------------------------------------------------------- conversations
