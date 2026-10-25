@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import {
   Check,
+  Info,
   MessageSquarePlus,
   MessagesSquare,
   PanelLeft,
@@ -56,6 +57,7 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
   const [draft, setDraft] = useState('');
   const [live, setLive] = useState<LiveAnswer | null>(null);
   const [streaming, setStreaming] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [railOpen, setRailOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState('');
@@ -83,7 +85,7 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
     const element = scrollRef.current;
     if (!element) return;
     element.scrollTop = element.scrollHeight;
-  }, [messages, live?.content, live?.hits, messagesLoading]);
+  }, [messages, live?.content, live?.hits, messagesLoading, notice]);
 
   useEffect(() => {
     const element = textareaRef.current;
@@ -103,6 +105,7 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
       abortRef.current?.abort();
       setActiveId(id);
       setLive(null);
+      setNotice(null);
       setRailOpen(false);
       setMessagesLoading(true);
       try {
@@ -123,6 +126,7 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
     setActiveId(null);
     setMessages([]);
     setLive(null);
+    setNotice(null);
     setRailOpen(false);
     setDraft('');
     textareaRef.current?.focus();
@@ -147,6 +151,7 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
       setDraft('');
       setMessages((current) => [...current, localUser]);
       setLive({ content: '', hits: null, startedAt: new Date().toISOString() });
+      setNotice(null);
       liveContentRef.current = '';
       setStreaming(true);
 
@@ -180,6 +185,7 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
               liveContentRef.current += token;
               setLive((current) => (current ? { ...current, content: current.content + token } : current));
             },
+            onNotice: (value) => setNotice(value),
             onDone: (finalMessage) => {
               finished = true;
               setMessages((current) => [...current, finalMessage]);
@@ -500,6 +506,13 @@ export function ChatView({ onOpenItem }: ChatViewProps) {
                     onOpenCitation={onOpenItem}
                   />
                 )
+              ) : null}
+
+              {notice ? (
+                <div className="flex items-start gap-2.5 rounded-md border border-amber-300 bg-amber-50 px-3 py-3 text-xs leading-relaxed text-amber-900">
+                  <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <p className="min-w-0">{notice}</p>
+                </div>
               ) : null}
             </>
           )}
