@@ -26,13 +26,49 @@ Users can upload text, PDFs, images, audio, and videos, then ask questions about
 - NumPy
 - Retrieval-Augmented Generation (RAG)
 
-## Installation
+## Run locally (Windows PowerShell)
 
-Clone the repository and install the required backend and frontend dependencies.
+Install dependencies once:
 
-Configure your Gemini API key in the backend .env file.
+```powershell
+cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+cd ..\frontend
+npm install
+```
 
-Start the FastAPI backend and React frontend, then open the local URL in your browser.
+Start the API and UI in separate terminals:
+
+```powershell
+cd backend
+.\.venv\Scripts\Activate.ps1
+uvicorn app.main:app --reload
+```
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Open http://localhost:5173. The API health check is at http://127.0.0.1:8000/api/health.
+
+## Models and privacy
+
+With no API keys, text and text-based PDFs are indexed locally and questions use
+local retrieval with extractive answers. Image, audio, video, and scanned-PDF
+understanding require a compatible provider; uploads that cannot be read are
+marked as failed with a reason rather than indexed as if their contents were
+understood.
+
+To enable multimodal extraction and generated answers, copy
+`backend/.env.example` to `backend/.env` and set a provider key. Gemini supports
+images, audio, video, and scanned PDFs; OpenRouter supports images; Groq supports
+audio transcription. Configure `LLM_PROVIDER=auto` to use a configured provider,
+or select one directly. Remote providers receive uploaded media and/or retrieved
+passages when processing your requests. Pollinations is keyless but remote and
+must be explicitly selected with `LLM_PROVIDER=pollinations`.
 
 ## How It Works
 
