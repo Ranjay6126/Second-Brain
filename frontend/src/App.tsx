@@ -84,7 +84,13 @@ function AppShell() {
           query={query}
           onSearch={handleSearch}
           onNew={() => setUploadOpen(true)}
-          showLocalBanner={health?.mode === 'local' && !bannerDismissed}
+          showLocalBanner={
+            Boolean(
+              health &&
+                !bannerDismissed &&
+                (['image', 'audio', 'video'] as const).some((kind) => !health.capabilities[kind]),
+            )
+          }
           onDismissLocalBanner={() => setBannerDismissed(true)}
         />
 
