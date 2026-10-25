@@ -6,14 +6,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import db, llm, vector
+from . import db, ingest, llm, vector
 from .config import (
-    CHAT_MODEL,
     DEV_ORIGINS,
+    EMBED_DIM,
     EMBED_MODEL,
     FRONTEND_DIST,
-    GEMINI_API_KEY,
-    MEDIA_MODEL,
+    MAX_UPLOAD_MB,
     TOP_K,
 )
 from .routers import chat as chat_router
@@ -51,15 +50,44 @@ def health():
     totals = db.counts()
     return {
         "status": "ok",
-        "mode": "gemini" if GEMINI_API_KEY else "local",
-        "embed_model": EMBED_MODEL if GEMINI_API_KEY else "local-hash-768",
-        "chat_model": CHAT_MODEL if GEMINI_API_KEY else "extractive-local",
-        "media_model": MEDIA_MODEL if GEMINI_API_KEY else "none",
+        "provider": llm.provider(),
+        "embed_model": EMBED_MODEL if llm.has_gemini_key() else f"local-hash-{EMBED_DIM}",
+        "chat_model": llm.answer_model_name(),
+        "capabilities": {
+            "text": True,
+            "pdf": True,
+            "image": llm.can_describe("image"),
+            "audio": llm.can_describe("audio"),
+            "video": llm.can_describe("video"),
+        },
         "top_k": TOP_K,
         "index": vector.stats(),
-        "key_configured": bool(GEMINI_API_KEY),
+        "key_configured": llm.has_configured_key(),
         "items": totals["items"],
         "chunks": totals["chunks"],
+    }
+
+
+@app.get("/api/stats", tags=["meta"])
+def stats():
+    """Real library numbers for the dashboard - never estimated."""
+    return db.library_stats()
+
+
+@app.get("/api/capabilities", tags=["meta"])
+def capabilities():
+    return {
+        "provider": llm.provider(),
+        "chat_model": llm.answer_model_name(),
+        "kinds": {
+            "text": True,
+            "pdf": True,
+            "image": llm.can_describe("image"),
+            "audio": llm.can_describe("audio"),
+            "video": llm.can_describe("video"),
+        },
+        "supported_extensions": ingest.SUPPORTED_EXTENSIONS,
+        "max_upload_mb": MAX_UPLOAD_MB,
     }
 
 
