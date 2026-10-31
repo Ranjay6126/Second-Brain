@@ -11,9 +11,10 @@ ROOT_DIR = BASE_DIR.parent
 load_dotenv(BASE_DIR / ".env")
 
 
-def _int(name: str, default: int) -> int:
+def _int(name: str, default: int, minimum: int = 0) -> int:
     try:
-        return int(os.getenv(name, "") or default)
+        value = int(os.getenv(name, "") or default)
+        return value if value >= minimum else default
     except ValueError:
         return default
 
@@ -30,7 +31,7 @@ GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or 
 EMBED_MODEL = os.getenv("EMBED_MODEL", "gemini-embedding-001")
 CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-2.5-flash")
 MEDIA_MODEL = os.getenv("MEDIA_MODEL") or CHAT_MODEL
-EMBED_DIM = _int("EMBED_DIM", 768)
+EMBED_DIM = _int("EMBED_DIM", 768, minimum=1)
 
 # --- Optional remote model providers ----------------------------------------
 # Remote providers receive retrieved note/document content. The default stays
